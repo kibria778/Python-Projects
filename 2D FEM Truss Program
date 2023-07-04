@@ -1,0 +1,116 @@
+import numpy as np
+
+class TrussElement:
+    def __init__(self, node_i, node_j, area, modulus_of_elasticity):
+        self.node_i = node_i
+        self.node_j = node_j
+        self.area = area
+        self.modulus_of_elasticity = modulus_of_elasticity
+
+    def compute_stiffness_matrix(self):
+        length = np.linalg.norm(self.node_j - self.node_i)
+        direction = (self.node_j - self.node_i) / length
+        cosine = direction[0]
+        sine = direction[1]
+        k = np.array([
+            [cosine**2, cosine*sine, -cosine**2, -cosine*sine],
+            [cosine*sine, sine**2, -cosine*sine, -sine**2],
+            [-cosine**2, -cosine*sine, cosine**2, cosine*sine],
+            [-cosine*sine, -sine**2, cosine*sine, sine**2]
+        ]) * (self.modulus_of_elasticity * self.area / length)
+        return k
+
+class TrussSystem:
+    def __init__(self):
+        self.nodes = []
+        self.elements = []
+        self.global_stiffness_matrix = None
+
+    def add_node(self, coordinates):
+        self.nodes.append(coordinates)
+
+    def add_element(self, node_i_index, node_j_index, area, modulus_of_elasticity):
+        node_i = self.nodes[node_i_index]
+        node_j = self.nodes[node_j_index]
+        element = TrussElement(node_i, node_j, area, modulus_of_elasticity)
+        self.elements.append(element)
+
+    def assemble_global_stiffness_matrix(self):
+        num_nodes = len(self.nodes)
+        k_global = np.zeros((2*num_nodes, 2*num_nodes))
+        for element in self.elements:
+            node_i_index = self.nodes.index(element.node_i)
+            node_j_index = self.nodes.index(element.node_j)
+            k_local = element.compute_stiffness_matrix()
+            k_global[2*node_i_index:2*node_i_index+2, 2*node_i_index:2*node_i_index+2] += k_local[:2, :2]
+            k_global[2*node_i_index:2*node_i_index+2, 2*node_j_index:2*node_j_index+2] += k_local[:2, 2:]
+            k_global[2*node_j_index:2*node_j_index+2, 2*node_i_index:2*node_i_index+2] += k_local[2:, :2]
+            k_global[2*node_j_index:2*node_j_index+2, 2*node_j_index:2*node_j_index+2] += k_local[2:, 2:]
+        self.global_stiffness_matrix = k_global
+
+    def solve(self, external_forces):
+        num_nodes = len(self.nodes)
+        num_dofs = 2 * num_nodes
+
+        # Apply boundary conditions to the global stiffness matrix and external forces
+        constrained_dofs = [0, 1]  # Example: Fixed support at node 0
+        free_dofs = list(set(range(num_dofs)) - set(constrained_dofs))
+
+        k_ff = self.global_stiffness_matrix[np.ix_(free_dofs, free_dofs)]
+        f_f = external_forces[free_dofs]
+
+        # Solve for displacements
+        displacements = np.zeros(num_dofs)
+        displacements[free_dofs] = np.linalg.solve(k_ff, f_f)
+
+        return displacements
+
+    def calculate_strains(self, displacements):
+        strains = []
+        for element in self.elements:
+            node_i_index = self.nodes.index(element.node_i)
+            node_j_index = self.nodes.index(element.node_j)
+            u_i = displacements[2 * node_i_index:2 * node_i_index + 2]
+            u_j = displacements[2 * node_j_index:2 * node_j_index + 2]
+            length = np.linalg.norm(element.node_j - element.node_i)
+            delta_length = length - np.linalg.norm(u_j - u_i)
+            strain = delta_length / length
+            strains.append(strain)
+        return strains
+
+    def calculate_stresses(self, strains):
+        modulus_of_elasticity = self.elements[0].modulus_of_elasticity
+        stresses = [modulus_of_elasticity * strain for strain in strains]
+        return stresses
+
+# Create a truss system
+truss = TrussSystem()
+
+# Add nodes
+truss.add_node([0, 0])
+truss.add_node([2, 0])
+truss.add_node([1, 1])
+
+# Add elements
+truss.add_element(0, 1, 1, 1e9)
+truss.add_element(1, 2, 1, 1e9)
+truss.add_element(0, 2, 1, 1e9)
+
+# Assemble global stiffness matrix
+truss.assemble_global_stiffness_matrix()
+
+# Apply external forces
+external_forces = np.array([0, -10000, 0, 0, 0, 0])  # Assumes fixed support at node 0
+displacements = truss.solve(external_forces)
+
+# Calculate strains and stresses
+strains = truss.calculate_strains(displacements)
+stresses = truss.calculate_stresses(strains)
+
+# Print results
+print("Nodal Displacements:")
+print(displacements)
+print("Element Strains:")
+print(strains)
+print("Element Stresses:")
+print(stresses)
