@@ -2,8 +2,8 @@ import numpy as np
 
 class TrussElement:
     def __init__(self, node_i, node_j, area, modulus_of_elasticity):
-        self.node_i = node_i
-        self.node_j = node_j
+        self.node_i = np.array(node_i)
+        self.node_j = np.array(node_j)
         self.area = area
         self.modulus_of_elasticity = modulus_of_elasticity
 
@@ -37,15 +37,15 @@ class TrussSystem:
 
     def assemble_global_stiffness_matrix(self):
         num_nodes = len(self.nodes)
-        k_global = np.zeros((2*num_nodes, 2*num_nodes))
+        k_global = np.zeros((2 * num_nodes, 2 * num_nodes))
         for element in self.elements:
-            node_i_index = self.nodes.index(element.node_i)
-            node_j_index = self.nodes.index(element.node_j)
+            node_i_index = np.argwhere(np.all(np.array(self.nodes) == element.node_i, axis=1))[0][0]
+            node_j_index = np.argwhere(np.all(np.array(self.nodes) == element.node_j, axis=1))[0][0]
             k_local = element.compute_stiffness_matrix()
-            k_global[2*node_i_index:2*node_i_index+2, 2*node_i_index:2*node_i_index+2] += k_local[:2, :2]
-            k_global[2*node_i_index:2*node_i_index+2, 2*node_j_index:2*node_j_index+2] += k_local[:2, 2:]
-            k_global[2*node_j_index:2*node_j_index+2, 2*node_i_index:2*node_i_index+2] += k_local[2:, :2]
-            k_global[2*node_j_index:2*node_j_index+2, 2*node_j_index:2*node_j_index+2] += k_local[2:, 2:]
+            k_global[2 * node_i_index:2 * node_i_index + 2, 2 * node_i_index:2 * node_i_index + 2] += k_local[:2, :2]
+            k_global[2 * node_i_index:2 * node_i_index + 2, 2 * node_j_index:2 * node_j_index + 2] += k_local[:2, 2:]
+            k_global[2 * node_j_index:2 * node_j_index + 2, 2 * node_i_index:2 * node_i_index + 2] += k_local[2:, :2]
+            k_global[2 * node_j_index:2 * node_j_index + 2, 2 * node_j_index:2 * node_j_index + 2] += k_local[2:, 2:]
         self.global_stiffness_matrix = k_global
 
     def solve(self, external_forces):
@@ -53,7 +53,7 @@ class TrussSystem:
         num_dofs = 2 * num_nodes
 
         # Apply boundary conditions to the global stiffness matrix and external forces
-        constrained_dofs = [0, 1]  # Example: Fixed support at node 0
+        constrained_dofs = [4, 5]  # Example: Fixed support at node 0
         free_dofs = list(set(range(num_dofs)) - set(constrained_dofs))
 
         k_ff = self.global_stiffness_matrix[np.ix_(free_dofs, free_dofs)]
@@ -68,8 +68,8 @@ class TrussSystem:
     def calculate_strains(self, displacements):
         strains = []
         for element in self.elements:
-            node_i_index = self.nodes.index(element.node_i)
-            node_j_index = self.nodes.index(element.node_j)
+            node_i_index = np.argwhere(np.all(np.array(self.nodes) == element.node_i, axis=1))[0][0]
+            node_j_index = np.argwhere(np.all(np.array(self.nodes) == element.node_j, axis=1))[0][0]
             u_i = displacements[2 * node_i_index:2 * node_i_index + 2]
             u_j = displacements[2 * node_j_index:2 * node_j_index + 2]
             length = np.linalg.norm(element.node_j - element.node_i)
